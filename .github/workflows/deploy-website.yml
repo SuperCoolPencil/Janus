@@ -2,7 +2,7 @@ name: Deploy learning site to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - website/**
       - .github/workflows/deploy-website.yml
