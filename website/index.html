@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta
+      name="description"
+      content="An interactive guided tour of Janus, ext4, and filesystems."
+    >
+    <title>Janus: a friendly filesystem field guide</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <div class="stars" aria-hidden="true"></div>
+    <header class="hero" id="top">
+      <nav>
+        <a class="brand" href="#top"><span>◒</span> JANUS</a><div
+          class="nav-links"
+        >
+          <a href="#journey">The journey</a><a href="#play">Play lab</a><a
+            href="#map"
+          >Code map</a>
+        </div>
+      </nav>
+      <div class="hero-copy">
+        <p class="eyebrow">
+          A no-jargon field guide to a real filesystem driver
+        </p>
+        <h1>Your files are<br><em>tiny treasure maps.</em></h1>
+        <p class="lede">
+          A Linux drive has just been connected to our Windows computer.
+          Somewhere inside it is <code>/home/ada/hello.txt</code>, and we want
+          to open that file without changing a single byte on the disk. To get
+          there, we will have to learn how a filesystem turns a name into a
+          physical location.
+        </p>
+        <div class="hero-actions">
+          <a class="button" href="#mission">Begin our mission <span
+            >→</span></a><button
+            class="theme-toggle"
+            id="themeToggle"
+            type="button"
+            aria-label="Enable dark mode"
+            aria-pressed="false"
+          >
+            <span aria-hidden="true">◐</span> <b>Dark mode</b>
+          </button>
+        </div>
+      </div>
+      <div class="orbital" aria-hidden="true">
+        <div class="orbit o1"></div>
+        <div class="orbit o2"></div>
+        <div class="planet">/</div><span class="tag tag-one">inode</span><span
+          class="tag tag-two"
+        >bytes</span><span class="tag tag-three">ext4</span>
+      </div>
+      <a class="scroll-hint" href="#first-idea">Scroll to unpack it <span
+        >↓</span></a>
+    </header>
+
+    <main>
+      <section class="section mission reveal" id="mission">
+        <div class="mission-copy">
+          <p class="eyebrow">Our mission</p>
+          <h2>Find one file in a sea of bytes.</h2>
+          <p>
+            Windows can see the physical drive, but ext4 is not its native
+            filesystem. At first, all we have is a device full of numbered
+            sectors and a path written by a human. Our job is to follow the
+            clues stored by ext4 until that path becomes the exact bytes of the
+            file.
+          </p>
+        </div>
+        <div class="mission-file">
+          <span>THE FILE WE WANT</span><strong
+          >/home/ada/hello.txt</strong><small>Read it safely. Change
+            nothing.</small>
+        </div>
+        <ol class="story-route" aria-label="Course chapters">
+          <li>
+            <a href="#first-idea"><b>1</b><span>Make sense of the disk<small
+                >What does a filesystem add?</small></span></a>
+          </li>
+          <li>
+            <a href="#journey"><b>2</b><span>Find the map legend<small>Where
+                  does ext4 begin?</small></span></a>
+          </li>
+          <li>
+            <a href="#structures"><b>3</b><span>Follow four clues<small>How are
+                  files organized?</small></span></a>
+          </li>
+          <li>
+            <a href="#play"><b>4</b><span>Read the raw bytes<small>Can we
+                  calculate the offsets?</small></span></a>
+          </li>
+          <li>
+            <a href="#path-walk"><b>5</b><span>Open hello.txt<small>How does the
+                  whole journey connect?</small></span></a>
+          </li>
+        </ol>
+      </section>
+
+      <nav class="course-rail" id="courseRail" aria-label="Lesson progress">
+        <span>Our progress</span><a href="#first-idea" data-course-link="1"
+        >01</a><a href="#journey" data-course-link="2">02</a><a
+          href="#structures"
+          data-course-link="3"
+        >03</a><a href="#play" data-course-link="4">04</a><a
+          href="#path-walk"
+          data-course-link="5"
+        >05</a><i id="courseProgress"></i>
+      </nav>
+
+      <section
+        class="section intro reveal course-chapter"
+        id="first-idea"
+        data-course="1"
+      >
+        <p class="eyebrow">Chapter one of five · we have a disk, but no map</p>
+        <h2>What is a filesystem,<br>really?</h2>
+        <p>
+          Imagine being handed a brand-new disk. It is not empty in the
+          friendly, folder-shaped way your computer makes it look; it is simply
+          a vast row of places where bytes can be written and later read back. A
+          filesystem is the set of conventions that turns that unhelpful blank
+          expanse into a place where names, folders, dates, and files can exist.
+          It answers questions such as “what does this name refer to?” and
+          “which bytes should I return when someone opens this file?”
+        </p>
+        <p>
+          We are going to become ext4 readers. We will not invent these
+          conventions or guess at them; we will carefully read the structures
+          that Linux wrote onto the disk and see how a filesystem can translate
+          those answers into the language Windows expects.
+        </p>
+        <div class="definition-grid">
+          <article>
+            <span class="icon">▦</span><h3>The disk</h3>
+            <p>
+              Physical storage: a long, numbered sequence of sectors holding
+              nothing but bytes.
+            </p>
+          </article>
+          <article>
+            <span class="icon">◫</span><h3>The partition</h3>
+            <p>
+              A bounded region of the disk that can hold one filesystem, such as
+              an ext4 volume.
+            </p>
+          </article>
+          <article>
+            <span class="icon">✦</span><h3>The filesystem</h3>
+            <p>
+              The catalog and rules that explain how this region is organized
+              and how its bytes relate.
+            </p>
+          </article>
+          <article>
+            <span class="icon">⌁</span><h3>The file</h3>
+            <p>
+              A name that starts a trail through that catalog until the file’s
+              contents are found.
+            </p>
+          </article>
+        </div>
+        <aside class="story-beat">
+          <span>What we discovered</span><p>
+            The disk stores bytes, while the filesystem stores the meaning that
+            connects those bytes. We know our ext4 partition contains a map, but
+            we still need a dependable place to begin reading it.
+          </p><a href="#journey">Next, find ext4’s first clue <b>→</b></a>
+        </aside>
+      </section>
+
+      <section
+        class="section onion-course course-chapter"
+        id="journey"
+        data-course="2"
+      >
+        <div class="section-heading reveal">
+          <p class="eyebrow">
+            Chapter two of five · find the first trustworthy clue
+          </p>
+          <h2>Where does ext4 begin?</h2>
+          <p>
+            We cannot search the disk for a filename because we do not yet know
+            which bytes represent names. What we need is one address whose
+            meaning is fixed in advance. ext4 gives us exactly that at byte
+            1024, where the superblock begins and tells us how the rest of the
+            filesystem is organized.
+          </p>
+        </div>
+        <div class="onion-layout reveal">
+          <div class="onion" id="onion" aria-label="Interactive ext4 layers">
+            <button
+              class="onion-layer layer-data"
+              data-layer="3"
+              aria-label="Data blocks"
+            >
+            </button>
+            <button
+              class="onion-layer layer-inodes"
+              data-layer="2"
+              aria-label="Inode tables"
+            >
+            </button>
+            <button
+              class="onion-layer layer-gdt"
+              data-layer="1"
+              aria-label="Group descriptor table"
+            >
+            </button>
+            <button
+              class="onion-layer layer-super active"
+              data-layer="0"
+              aria-label="Superblock"
+            >
+            </button>
+            <svg
+              class="onion-connectors"
+              viewBox="-190 0 550 360"
+              aria-hidden="true"
+            >
+              <path d="M -33 104 H 28 L 63 111" />
+              <circle cx="63" cy="111" r="3" />
+              <path d="M -45 160 H 45 L 84 174" />
+              <circle cx="84" cy="174" r="3" />
+              <path d="M -5 210 H 77 L 115 202" />
+              <circle cx="115" cy="202" r="3" />
+              <path d="M -20 290 H 9 L 25 280" />
+              <circle cx="25" cy="280" r="3" />
+            </svg>
+            <button class="onion-label label-inodes" data-layer="2">
+              Inode tables
+            </button>
+            <button class="onion-label label-gdt" data-layer="1">
+              Group descriptor table
+            </button>
+            <button class="onion-label label-super" data-layer="0">
+              Superblock
+            </button>
+            <button class="onion-label label-data" data-layer="3">
+              Data blocks
+            </button>
+          </div>
+          <div class="onion-carousel">
+            <article class="onion-card" id="onionCard">
+              <p class="card-kicker">
+                First clue · the filesystem’s identity card
+              </p>
+              <h3>The superblock tells us how to read everything else.</h3>
+              <p>
+                At exactly byte <code>1024</code> from the beginning of an ext4
+                filesystem lives its superblock. This is the one fixed landmark
+                we can trust before we know anything else. It records the
+                filesystem’s block size, how many inodes and blocks exist, how
+                many blocks belong in a group, and how large each group
+                descriptor is. We read it in <code>ext4/superblock.go</code>,
+                check the ext4 magic number, and derive the geometry we will
+                need for every later calculation.
+              </p>
+              <p class="file-ref">
+                In the code: <strong>ext4/superblock.go</strong> → <strong
+                >ReadSuperBlock()</strong>
+              </p>
+            </article>
+            <div class="onion-controls">
+              <button
+                id="onionPrev"
+                aria-label="Show previous filesystem layer"
+              >
+                ← Previous clue
+              </button><span id="onionProgress">1 of 4</span><button
+                id="onionNext"
+                aria-label="Show next filesystem layer"
+              >
+                Next clue →
+              </button>
+            </div>
+          </div>
+        </div>
+        <aside class="story-beat story-beat-dark">
+          <span>Our map is taking shape</span><p>
+            The superblock gives us the scale of the map, while the GDT, inode
+            tables, and data blocks form the chain that can eventually lead to
+            <code>hello.txt</code>. Before we attempt the read, we need to
+            understand what each clue contributes.
+          </p><a href="#structures">Next, examine each structure <b>→</b></a>
+        </aside>
+      </section>
+
+      <section
+        class="section layer-lessons course-chapter"
+        id="structures"
+        data-course="3"
+      >
+        <div class="chapter-intro reveal">
+          <p class="eyebrow">
+            Chapter three of five · learn how one clue points to another
+          </p>
+          <h2>Four structures stand between our path and its bytes.</h2>
+          <p>
+            We can now read the filesystem’s opening page. The next challenge is
+            understanding the chain of references it reveals, because every
+            answer gives us the address needed to ask the next question.
+          </p>
+        </div>
+        <div class="lesson reveal">
+          <p class="eyebrow">Peel one · superblock</p>
+          <h2>
+            The first 1024 bytes are quiet. Then the filesystem introduces
+            itself.
+          </h2>
+          <p>
+            The superblock is not a list of every file. It is much more useful
+            than that: it is the legend for the whole map. A value named <code
+            >S_log_block_size</code> tells us the size of an ext4 block using
+            <code>1024 &lt;&lt; value</code>; another says how many inodes live
+            in each group; another tells it whether the filesystem was cleanly
+            unmounted. Without this information, an offset such as “block 812”
+            would have no meaning at all.
+          </p>
+          <p>
+            We deliberately refuse an unclean filesystem because ext4 may need
+            journal recovery after an interrupted write, and this reader does
+            not replay that journal. The project chooses safety over pretending
+            that partially recovered data is straightforward.
+          </p>
+        </div>
+        <div class="lesson reveal">
+          <p class="eyebrow">Peel two · block groups and the GDT</p>
+          <h2>One enormous filesystem is divided into neighborhoods.</h2>
+          <p>
+            Rather than keeping every inode and every allocation record in one
+            gigantic structure, ext4 divides the partition into block groups.
+            Each group is a local neighborhood with bookkeeping for its own
+            blocks and inodes. After the superblock comes the group descriptor
+            table, often shortened to GDT: one descriptor for each neighborhood.
+          </p>
+          <p>
+            A group descriptor tells us where that group’s inode table begins,
+            along with its block bitmap and inode bitmap. In <code
+            >ext4/group_descr.go</code>, we load those descriptors after it has
+            learned the block size and descriptor size from the superblock. This
+            is the moment the abstract filesystem map starts gaining addresses.
+          </p>
+        </div>
+        <div class="lesson reveal">
+          <p class="eyebrow">Peel three · inode tables</p>
+          <h2>An inode is a file’s record, not its name.</h2>
+          <p>
+            This is usually the moment filesystem design starts to feel clever.
+            A directory is a list of names paired with inode numbers; the inode
+            table is where those numbered records live. When we see the name
+            <code>hello.txt</code> in a directory, we read that entry’s inode
+            number, determine which group owns it, find that group’s inode table
+            through the GDT, and calculate the exact byte offset of the record.
+          </p>
+          <p>
+            The inode describes whether the thing is a regular file, directory,
+            or symbolic link; it includes the size, timestamps, permissions, and
+            the data mapping. This separation is why renaming a file is mostly
+            changing a directory entry rather than moving its contents.
+          </p>
+        </div>
+        <div class="lesson reveal">
+          <p class="eyebrow">Peel four · data blocks and extents</p>
+          <h2>Eventually, the map points to the bytes you came for.</h2>
+          <p>
+            For modern ext4 files, the inode usually contains an extent tree. An
+            extent is a wonderfully compact promise: a run of logical blocks in
+            the file belongs to a run of physical blocks on disk. Small files
+            can keep that map directly inside the inode; larger or fragmented
+            files can point to more nodes on disk. We walk this tree in <code
+            >ext4/extent.go</code> and use the result in <code
+            >ext4/file.go</code> to satisfy reads at a requested file offset.
+          </p>
+          <p>
+            Directories work this way too. Their data blocks contain directory
+            entries, names and inode numbers, which gives us the next clue while
+            walking a path like <code>/home/ada/hello.txt</code>.
+          </p>
+        </div>
+        <aside class="story-beat">
+          <span>We have all four clues</span><p>
+            We know what every structure means, but understanding the nouns is
+            not the same as performing the read. It is time to calculate actual
+            offsets and watch raw bytes turn into useful information.
+          </p><a href="#play">Next, read the disk ourselves <b>→</b></a>
+        </aside>
+      </section>
+
+      <section
+        class="section byte-lab course-chapter"
+        id="play"
+        data-course="4"
+      >
+        <div class="section-heading reveal">
+          <p class="eyebrow">
+            Chapter four of five · turn addresses into evidence
+          </p>
+          <h2>Let’s read raw bytes together.</h2>
+          <p>
+            We finally have enough context to begin where the computer begins.
+            Move through these reads in order and notice that each decoded
+            structure supplies the address or geometry required by the following
+            step.
+          </p>
+        </div>
+        <div class="reader reveal">
+          <div class="reader-tabs" id="readerTabs">
+            <button class="active" data-read="0">1. Find the superblock</button>
+            <button data-read="1">2. Read the GDT</button>
+            <button data-read="2">3. Locate an inode</button>
+            <button data-read="3">4. Follow an extent</button>
+            <button data-read="4">5. Read the file</button>
+          </div>
+          <div class="reader-window">
+            <div class="terminal-head">
+              <span></span><span></span><span></span><b>raw-byte reader</b>
+            </div>
+            <div id="byteView"></div>
+          </div>
+        </div>
+        <p class="reader-note reveal">
+          In the real code, we use Go’s <code>io.ReaderAt</code> interface for
+          every one of these reads. In mount mode, <code
+          >disk.PartitionReader</code> adds the partition’s starting offset and
+          rejects requests that would wander into a neighboring partition.
+        </p>
+        <aside class="story-beat">
+          <span>The bytes are no longer mysterious</span><p>
+            We can move from a fixed offset to a superblock, from the GDT to an
+            inode table, and from an extent to file data. Only one piece
+            remains: applying the same process repeatedly to every name in our
+            original path.
+          </p><a href="#path-walk">Next, open hello.txt <b>→</b></a>
+        </aside>
+      </section>
+
+      <section
+        class="section journey path-lesson course-chapter"
+        id="path-walk"
+        data-course="5"
+      >
+        <div class="section-heading reveal">
+          <p class="eyebrow">
+            Chapter five of five · return to the file that started our journey
+          </p>
+          <h2>Open /home/ada/hello.txt</h2>
+          <p>
+            We begin at ext4’s fixed root inode, read a directory block, choose
+            the entry matching the next name, and repeat until the final inode
+            gives us the extents for the file itself. This is where every
+            earlier lesson becomes one continuous operation.
+          </p>
+        </div>
+        <div class="lab-grid reveal">
+          <article class="lab-card">
+            <div class="card-top">
+              <span>directory entries → inode numbers</span><span>click
+                around</span>
+            </div>
+            <h3>Start at root inode 2</h3>
+            <p>
+              Each folder below is a tiny model of a directory block. Open one,
+              and you are doing the same conceptual work as <code
+              >FileSystem.Walk</code>.
+            </p>
+            <div class="crumbs" id="crumbs"></div>
+            <div class="tree" id="tree"></div>
+            <p class="output" id="pathOutput">
+              The root directory is always inode <b>2</b> in ext4.
+            </p>
+          </article>
+          <article class="lab-card">
+            <div class="card-top">
+              <span>logical blocks → physical blocks</span><span>move the
+                slider</span>
+            </div>
+            <h3>Use the inode’s extent map</h3>
+            <p>
+              Once the path identifies a regular file, its inode gives us its
+              extent map. Move across this small file and notice that the
+              physical run changes halfway through.
+            </p><input
+              id="blockSlider"
+              type="range"
+              min="0"
+              max="5"
+              value="0"
+              aria-label="Logical file block"
+            ><div class="block-readout">
+              <div>
+                <small>logical block in the file</small><b id="logical">0</b>
+              </div><span>→</span><div>
+                <small>physical block on disk</small><b id="physical">812</b>
+              </div>
+            </div>
+            <div class="blocks" id="blocks"></div>
+            <p class="output" id="extentOutput">
+              We are reading logical block 0 from physical disk block 812.
+            </p>
+          </article>
+        </div>
+        <div class="mission-complete reveal">
+          <span>MISSION COMPLETE</span><h3>Hello, filesystems!</h3>
+          <p>
+            What began as a path on an unfamiliar drive has become a precise
+            sequence of reads. We never searched blindly, and we never changed
+            the partition. We followed the story ext4 had already written into
+            its metadata.
+          </p>
+        </div>
+      </section>
+
+      <section class="section map" id="map">
+        <div class="section-heading reveal">
+          <p class="eyebrow">When you want to read the source</p>
+          <h2>The same story, organized in Go files</h2>
+          <p>
+            These packages follow the onion from the outside in. Open them in
+            this order if you want the source to feel like a conversation with
+            the site rather than a wall of unfamiliar terms.
+          </p>
+        </div>
+        <div class="code-map reveal">
+          <details open>
+            <summary>
+              <span class="folder">▾</span><b>main.go</b><small>chooses a
+                command, disk, and partition</small>
+            </summary>
+            <div class="map-items">
+              <div>
+                <code>runMount()</code><p>
+                  Opens a physical disk, finds the requested partition, creates
+                  the ext4 reader, reads its superblock and group descriptors,
+                  then hands it to WinFsp.
+                </p>
+              </div>
+              <div>
+                <code>readExt4()</code><p>
+                  Shows the compact development path: superblock, group
+                  descriptors, root inode, then root directory entries.
+                </p>
+              </div>
+            </div>
+          </details>
+          <details>
+            <summary>
+              <span class="folder">▸</span><b>disk/</b><small>raw disk bytes
+                become a safe partition view</small>
+            </summary>
+            <div class="map-items">
+              <div>
+                <code>gpt.go · mbr.go</code><p>
+                  Recognize the two common partition table formats and return a
+                  consistent Partition model.
+                </p>
+              </div>
+              <div>
+                <code>disk.go · aligned.go</code><p>
+                  Translate filesystem-relative offsets to physical-disk
+                  offsets, stay inside partition bounds, and make sector-aligned
+                  reads when Windows requires them.
+                </p>
+              </div>
+            </div>
+          </details>
+          <details>
+            <summary>
+              <span class="folder">▸</span><b>ext4/</b><small>the
+                superblock-to-bytes onion</small>
+            </summary>
+            <div class="map-items">
+              <div>
+                <code>superblock.go · group_descr.go</code><p>
+                  Read the geometry first, then the per-group signposts.
+                </p>
+              </div>
+              <div>
+                <code>inode.go · dir.go · fs.go</code><p>
+                  Find inode records, turn directory entries into inode numbers,
+                  and walk absolute paths including intermediate symlinks.
+                </p>
+              </div>
+              <div>
+                <code>extent.go · file.go · symlink.go</code><p>
+                  Turn inode metadata into actual content bytes or a
+                  symbolic-link target.
+                </p>
+              </div>
+            </div>
+          </details>
+          <details>
+            <summary>
+              <span class="folder">▸</span><b>mount/</b><small>the
+                Windows-facing translation layer</small>
+            </summary>
+            <div class="map-items">
+              <div>
+                <code>fs.go · handles.go</code><p>
+                  Answer WinFsp’s filesystem callbacks, cache open handles and
+                  directory entries, and return EROFS for every operation that
+                  could modify the Linux filesystem.
+                </p>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="section read-only reveal">
+        <div class="lock">⌁</div>
+        <div>
+          <p class="eyebrow">The final design decision</p>
+          <h2>We can read the story without rewriting it.</h2>
+          <p>
+            All of this careful navigation is intentionally one-way. Operations
+            that would write, create, delete, rename, or change metadata return
+            <code>EROFS</code>, the standard “read-only filesystem” answer. That
+            is what makes this a reassuring way to explore a Linux partition
+            from Windows: we are here to understand, not to alter.
+          </p>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <a class="brand" href="#top"><span>◒</span> JANUS</a><p>
+        Made to make low-level code feel a little more magical.
+      </p><a href="https://github.com/supercoolpencil/janus"
+      >View the source ↗</a>
+    </footer>
+    <script src="script.js"></script>
+  </body>
+</html>
